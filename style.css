@@ -2,9 +2,27 @@ body{
     background-color: #BDDDFC;
 
     .top_navigation{
-        background-color: #6A89A7        
-    }
+        background-color: #6A89A7;
+    overflow: hidden;}
     .top_navigation a{
+        color: #88BDF2;
+        text-align: center;
+        padding: 24px 26px;
+        text-decoration: none;
+        font-size: 20px;
+        transition: 0.15s;
+    }
+
+
+
+
+    .top_navigation a:hover{
+        background-color: #384959;
         color: #BDDDFC;
+    }
+
+    .top_navigation a:active{
+        background-color: #88BDF2;
+        color: #6A89A7;
     }
 }
