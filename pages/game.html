@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pixel Quest</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    
+    * { image-rendering: pixelated; }
+    
+    .pixel-font { font-family: 'Press Start 2P', monospace; }
+    
+    @keyframes idle {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+    
+    @keyframes run {
+      0%, 100% { transform: translateX(0) scaleX(var(--direction, 1)); }
+      25% { transform: translateX(-2px) scaleX(var(--direction, 1)) translateY(-4px); }
+      50% { transform: translateX(0) scaleX(var(--direction, 1)); }
+      75% { transform: translateX(2px) scaleX(var(--direction, 1)) translateY(-4px); }
+    }
+    
+    @keyframes attack {
+      0% { transform: scaleX(var(--direction, 1)) rotate(0deg); }
+      25% { transform: scaleX(var(--direction, 1)) rotate(-15deg) scale(1.1); }
+      50% { transform: scaleX(var(--direction, 1)) rotate(15deg) scale(1.2); }
+      100% { transform: scaleX(var(--direction, 1)) rotate(0deg); }
+    }
+    
+    @keyframes hurt {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(3) hue-rotate(180deg); }
+    }
+    
+    @keyframes enemy-float {
+      0%, 100% { transform: translateY(0) scaleX(var(--direction, 1)); }
+      50% { transform: translateY(-8px) scaleX(var(--direction, 1)); }
+    }
+    
+    @keyframes enemy-attack {
+      0%, 100% { transform: scale(1) scaleX(var(--direction, 1)); }
+      50% { transform: scale(1.3) scaleX(var(--direction, 1)); }
+    }
+    
+    @keyframes death {
+      0% { opacity: 1; transform: scale(1) rotate(0deg); }
+      50% { opacity: 0.5; transform: scale(1.5) rotate(180deg); }
+      100% { opacity: 0; transform: scale(0) rotate(360deg); }
+    }
+    
+    @keyframes coin-spin {
+      0% { transform: scaleX(1); }
+      25% { transform: scaleX(0.3); }
+      50% { transform: scaleX(1); }
+      75% { transform: scaleX(0.3); }
+      100% { transform: scaleX(1); }
+    }
+    
+    @keyframes sparkle {
+      0%, 100% { opacity: 0; transform: scale(0); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+    
+    @keyframes float-text {
+      0% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-30px); }
+    }
+    
+    .player-idle { animation: idle 0.8s ease-in-out infinite; }
+    .player-run { animation: run 0.3s ease-in-out infinite; }
+    .player-attack { animation: attack 0.2s ease-out; }
+    .player-hurt { animation: hurt 0.2s ease-out; }
+    .enemy-float { animation: enemy-float 1.2s ease-in-out infinite; }
+    .enemy-attack { animation: enemy-attack 0.3s ease-out; }
+    .entity-death { animation: death 0.5s ease-out forwards; }
+    .coin-spin { animation: coin-spin 0.6s linear infinite; }
+    .sparkle { animation: sparkle 0.4s ease-out; }
+    .float-text { animation: float-text 1s ease-out forwards; }
+    
+    .ground-tile {
+      background: linear-gradient(180deg, #5d4e37 0%, #3d3226 50%, #2a231a 100%);
+      box-shadow: inset 0 2px 0 #7a6b52, inset 0 -2px 0 #1a1510;
+    }
+    
+    .grass-top {
+      background: linear-gradient(180deg, #4ade80 0%, #22c55e 50%, #16a34a 100%);
+      border-radius: 4px 4px 0 0;
+    }
+  </style>
+  <style>body { box-sizing: border-box; }</style>
+ </head>
+ <body class="h-full m-0 p-0 overflow-hidden">
+  <div id="game-container" class="h-full w-full relative" style="background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);"><!-- Stars background -->
+   <div id="stars" class="absolute inset-0 overflow-hidden pointer-events-none"></div><!-- UI Layer -->
+   <div class="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-50">
+    <div class="pixel-font text-white space-y-2">
+     <div id="game-title" class="text-lg text-yellow-400 drop-shadow-lg">
+      PIXEL QUEST
+     </div>
+     <div class="flex items-center gap-2"><span class="text-red-500">❤️</span>
+      <div id="health-bar" class="w-32 h-4 bg-gray-800 rounded overflow-hidden border-2 border-gray-600">
+       <div id="health-fill" class="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-200" style="width: 100%;"></div>
+      </div>
+     </div>
+     <div class="text-xs"><span class="text-yellow-400">SCORE:</span> <span id="score" class="text-white">0</span>
+     </div>
+    </div>
+    <div class="pixel-font text-white text-right space-y-2">
+     <div class="text-xs"><span class="text-purple-400">HIGH:</span> <span id="high-score" class="text-white">0</span>
+     </div>
+     <div id="player-display" class="text-xs text-cyan-400">
+      PLAYER 1
+     </div>
+    </div>
+   </div><!-- Game World -->
+   <div id="game-world" class="absolute inset-0 overflow-hidden"><!-- Ground -->
+    <div id="ground" class="absolute bottom-0 left-0 right-0 h-24">
+     <div class="grass-top h-3 w-full"></div>
+     <div class="ground-tile h-full w-full"></div>
+    </div><!-- Player -->
+    <div id="player" class="absolute player-idle" style="bottom: 96px; left: 100px; --direction: 1;">
+     <svg width="48" height="64" viewbox="0 0 48 64"><!-- Body --> <rect x="16" y="24" width="16" height="20" fill="#3b82f6" /> <rect x="14" y="26" width="4" height="16" fill="#3b82f6" /> <rect x="30" y="26" width="4" height="16" fill="#3b82f6" /> <!-- Head --> <rect x="12" y="4" width="24" height="22" fill="#fcd34d" /> <rect x="10" y="6" width="4" height="18" fill="#fcd34d" /> <rect x="34" y="6" width="4" height="18" fill="#fcd34d" /> <!-- Hair --> <rect x="10" y="2" width="28" height="8" fill="#92400e" /> <rect x="8" y="4" width="4" height="6" fill="#92400e" /> <rect x="36" y="4" width="4" height="6" fill="#92400e" /> <!-- Eyes --> <rect x="16" y="12" width="4" height="6" fill="#1e293b" /> <rect x="28" y="12" width="4" height="6" fill="#1e293b" /> <rect x="17" y="13" width="2" height="2" fill="#fff" /> <rect x="29" y="13" width="2" height="2" fill="#fff" /> <!-- Mouth --> <rect x="20" y="20" width="8" height="2" fill="#1e293b" /> <!-- Legs --> <rect x="16" y="44" width="6" height="16" fill="#1e40af" /> <rect x="26" y="44" width="6" height="16" fill="#1e40af" /> <!-- Feet --> <rect x="14" y="56" width="10" height="6" fill="#713f12" /> <rect x="24" y="56" width="10" height="6" fill="#713f12" /> <!-- Sword --> <g id="player-sword">
+       <rect x="36" y="28" width="4" height="20" fill="#94a3b8" />
+       <rect x="34" y="26" width="8" height="4" fill="#fbbf24" />
+       <rect x="36" y="22" width="4" height="4" fill="#dc2626" />
+      </g>
+     </svg>
+    </div><!-- Enemies container -->
+    <div id="enemies"></div><!-- Coins container -->
+    <div id="coins"></div><!-- Effects container -->
+    <div id="effects"></div>
+   </div><!-- Start Screen -->
+   <div id="start-screen" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-40">
+    <div class="pixel-font text-center space-y-6">
+     <h1 id="title-display" class="text-3xl text-yellow-400 animate-pulse">PIXEL QUEST</h1>
+     <div class="text-white text-sm space-y-2">
+      <p>⬅️ ➡️ Move</p>
+      <p>⬆️ Jump</p>
+      <p>SPACE Attack</p>
+     </div><button id="start-btn" class="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors"> START GAME </button>
+    </div>
+   </div><!-- Game Over Screen -->
+   <div id="game-over" class="absolute inset-0 bg-black/80 flex-col items-center justify-center z-40 hidden">
+    <div class="pixel-font text-center space-y-6">
+     <h1 class="text-3xl text-red-500">GAME OVER</h1>
+     <div class="text-white text-lg">
+      <p>SCORE: <span id="final-score" class="text-yellow-400">0</span></p>
+      <p id="new-high-score" class="text-green-400 hidden">NEW HIGH SCORE!</p>
+     </div><button id="restart-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"> PLAY AGAIN </button>
+    </div>
+   </div><!-- Mobile Controls -->
+   <div id="mobile-controls" class="absolute bottom-28 left-0 right-0 flex justify-between px-4 z-30 md:hidden">
+    <div class="flex gap-2"><button id="btn-left" class="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-2xl active:bg-white/40">⬅️</button> <button id="btn-right" class="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-2xl active:bg-white/40">➡️</button>
+    </div>
+    <div class="flex gap-2"><button id="btn-jump" class="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-2xl active:bg-white/40">⬆️</button> <button id="btn-attack" class="w-14 h-14 bg-red-500/50 rounded-full flex items-center justify-center text-2xl active:bg-red-500/80">⚔️</button>
+    </div>
+   </div>
+  </div>
+  <script>
+    // Default configuration
+    const defaultConfig = {
+      game_title: 'PIXEL QUEST',
+      player_name: 'PLAYER 1',
+      background_color: '#1a1a2e',
+      accent_color: '#fbbf24',
+      text_color: '#ffffff',
+      player_color: '#3b82f6',
+      enemy_color: '#ef4444'
+    };
+
+    // Game state
+    let gameState = {
+      running: false,
+      score: 0,
+      highScore: 0,
+      playerHealth: 100,
+      playerX: 100,
+      playerY: 0,
+      playerVelX: 0,
+      playerVelY: 0,
+      playerDirection: 1,
+      isJumping: false,
+      isAttacking: false,
+      enemies: [],
+      coins: [],
+      keys: {},
+      lastSpawn: 0,
+      spawnInterval: 2000,
+      groundY: 96
+    };
+
+    let highScores = [];
+    let config = { ...defaultConfig };
+
+    // Create stars
+    function createStars() {
+      const starsContainer = document.getElementById('stars');
+      starsContainer.innerHTML = '';
+      for (let i = 0; i < 50; i++) {
+        const star = document.createElement('div');
+        star.className = 'absolute rounded-full bg-white';
+        star.style.width = Math.random() * 3 + 1 + 'px';
+        star.style.height = star.style.width;
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 60 + '%';
+        star.style.opacity = Math.random() * 0.8 + 0.2;
+        starsContainer.appendChild(star);
+      }
+    }
+
+    // Enemy SVG generator
+    function createEnemySVG(type) {
+      if (type === 'slime') {
+        return `<svg width="40" height="40" viewBox="0 0 40 40">
+          <ellipse cx="20" cy="30" rx="18" ry="10" fill="#16a34a"/>
+          <ellipse cx="20" cy="22" rx="16" ry="14" fill="#22c55e"/>
+          <ellipse cx="20" cy="18" rx="14" ry="10" fill="#4ade80"/>
+          <rect x="10" y="16" width="6" height="8" fill="#1e293b"/>
+          <rect x="24" y="16" width="6" height="8" fill="#1e293b"/>
+          <rect x="12" y="18" width="2" height="2" fill="#fff"/>
+          <rect x="26" y="18" width="2" height="2" fill="#fff"/>
+        </svg>`;
+      } else if (type === 'bat') {
+        return `<svg width="48" height="32" viewBox="0 0 48 32">
+          <path d="M0 16 L8 8 L12 16 L16 4 L20 12 L24 8 L28 12 L32 4 L36 16 L40 8 L48 16 L40 20 L36 16 L32 24 L28 16 L24 20 L20 16 L16 24 L12 16 L8 20 Z" fill="#7c3aed"/>
+          <ellipse cx="24" cy="16" rx="8" ry="6" fill="#8b5cf6"/>
+          <rect x="18" y="12" width="4" height="4" fill="#fef08a"/>
+          <rect x="26" y="12" width="4" height="4" fill="#fef08a"/>
+          <rect x="19" y="13" width="2" height="2" fill="#1e293b"/>
+          <rect x="27" y="13" width="2" height="2" fill="#1e293b"/>
+        </svg>`;
+      } else {
+        return `<svg width="44" height="52" viewBox="0 0 44 52">
+          <rect x="10" y="20" width="24" height="24" fill="#dc2626"/>
+          <rect x="8" y="22" width="4" height="20" fill="#dc2626"/>
+          <rect x="32" y="22" width="4" height="20" fill="#dc2626"/>
+          <rect x="6" y="0" width="32" height="22" fill="#fafafa"/>
+          <rect x="4" y="2" width="4" height="18" fill="#fafafa"/>
+          <rect x="36" y="2" width="4" height="18" fill="#fafafa"/>
+          <rect x="12" y="8" width="6" height="8" fill="#1e293b"/>
+          <rect x="26" y="8" width="6" height="8" fill="#1e293b"/>
+          <rect x="14" y="10" width="2" height="2" fill="#dc2626"/>
+          <rect x="28" y="10" width="2" height="2" fill="#dc2626"/>
+          <rect x="16" y="16" width="12" height="4" fill="#1e293b"/>
+          <rect x="14" y="44" width="6" height="8" fill="#991b1b"/>
+          <rect x="24" y="44" width="6" height="8" fill="#991b1b"/>
+        </svg>`;
+      }
+    }
+
+    // Coin SVG
+    function createCoinSVG() {
+      return `<svg width="24" height="24" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="#fbbf24"/>
+        <circle cx="12" cy="12" r="8" fill="#fcd34d"/>
+        <circle cx="12" cy="12" r="6" fill="#fbbf24"/>
+        <text x="12" y="16" text-anchor="middle" fill="#92400e" font-size="10" font-weight="bold">$</text>
+      </svg>`;
+    }
+
+    // Spawn enemy
+    function spawnEnemy() {
+      const types = ['slime', 'bat', 'ghost'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const enemy = {
+        id: Date.now() + Math.random(),
+        type,
+        x: Math.random() > 0.5 ? -50 : window.innerWidth + 50,
+        y: type === 'bat' ? Math.random() * 200 + 100 : 0,
+        health: type === 'ghost' ? 2 : 1,
+        direction: 1,
+        speed: type === 'bat' ? 3 : 2
+      };
+      enemy.direction = enemy.x < 0 ? 1 : -1;
+      gameState.enemies.push(enemy);
+      renderEnemy(enemy);
+    }
+
+    // Render enemy
+    function renderEnemy(enemy) {
+      const container = document.getElementById('enemies');
+      const el = document.createElement('div');
+      el.id = 'enemy-' + enemy.id;
+      el.className = 'absolute ' + (enemy.type === 'bat' ? 'enemy-float' : 'enemy-float');
+      el.style.left = enemy.x + 'px';
+      el.style.bottom = (gameState.groundY + enemy.y) + 'px';
+      el.style.setProperty('--direction', enemy.direction);
+      el.innerHTML = createEnemySVG(enemy.type);
+      container.appendChild(el);
+    }
+
+    // Spawn coin
+    function spawnCoin(x, y) {
+      const coin = {
+        id: Date.now() + Math.random(),
+        x,
+        y
+      };
+      gameState.coins.push(coin);
+      
+      const container = document.getElementById('coins');
+      const el = document.createElement('div');
+      el.id = 'coin-' + coin.id;
+      el.className = 'absolute coin-spin';
+      el.style.left = x + 'px';
+      el.style.bottom = (gameState.groundY + y) + 'px';
+      el.innerHTML = createCoinSVG();
+      container.appendChild(el);
+    }
+
+    // Create floating text
+    function createFloatText(x, y, text, color) {
+      const el = document.createElement('div');
+      el.className = 'absolute pixel-font float-text text-sm';
+      el.style.left = x + 'px';
+      el.style.bottom = (gameState.groundY + y + 40) + 'px';
+      el.style.color = color;
+      el.textContent = text;
+      document.getElementById('effects').appendChild(el);
+      setTimeout(() => el.remove(), 1000);
+    }
+
+    // Create sparkle effect
+    function createSparkle(x, y) {
+      for (let i = 0; i < 6; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'absolute sparkle';
+        spark.style.left = (x + Math.random() * 30 - 15) + 'px';
+        spark.style.bottom = (gameState.groundY + y + Math.random() * 30) + 'px';
+        spark.style.width = '8px';
+        spark.style.height = '8px';
+        spark.style.background = '#fbbf24';
+        spark.style.borderRadius = '50%';
+        spark.style.animationDelay = (i * 0.05) + 's';
+        document.getElementById('effects').appendChild(spark);
+        setTimeout(() => spark.remove(), 500);
+      }
+    }
+
+    // Update player
+    function updatePlayer() {
+      const player = document.getElementById('player');
+      
+      // Movement
+      if (gameState.keys['ArrowLeft'] || gameState.keys['left']) {
+        gameState.playerVelX = -5;
+        gameState.playerDirection = -1;
+      } else if (gameState.keys['ArrowRight'] || gameState.keys['right']) {
+        gameState.playerVelX = 5;
+        gameState.playerDirection = 1;
+      } else {
+        gameState.playerVelX *= 0.8;
+      }
+      
+      // Jump
+      if ((gameState.keys['ArrowUp'] || gameState.keys['jump']) && !gameState.isJumping) {
+        gameState.playerVelY = 15;
+        gameState.isJumping = true;
+      }
+      
+      // Gravity
+      gameState.playerVelY -= 0.8;
+      
+      // Update position
+      gameState.playerX += gameState.playerVelX;
+      gameState.playerY += gameState.playerVelY;
+      
+      // Bounds
+      const maxX = window.innerWidth - 48;
+      gameState.playerX = Math.max(0, Math.min(maxX, gameState.playerX));
+      
+      // Ground collision
+      if (gameState.playerY <= 0) {
+        gameState.playerY = 0;
+        gameState.playerVelY = 0;
+        gameState.isJumping = false;
+      }
+      
+      // Update visual
+      player.style.left = gameState.playerX + 'px';
+      player.style.bottom = (gameState.groundY + gameState.playerY) + 'px';
+      player.style.setProperty('--direction', gameState.playerDirection);
+      
+      // Animation state
+      if (gameState.isAttacking) {
+        player.className = 'absolute player-attack';
+      } else if (Math.abs(gameState.playerVelX) > 0.5) {
+        player.className = 'absolute player-run';
+      } else {
+        player.className = 'absolute player-idle';
+      }
+    }
+
+    // Update enemies
+    function updateEnemies() {
+      gameState.enemies.forEach(enemy => {
+        enemy.x += enemy.speed * enemy.direction;
+        
+        // Bounds check - remove if off screen
+        if (enemy.x < -100 || enemy.x > window.innerWidth + 100) {
+          removeEnemy(enemy);
+          return;
+        }
+        
+        // Update element
+        const el = document.getElementById('enemy-' + enemy.id);
+        if (el) {
+          el.style.left = enemy.x + 'px';
+          el.style.setProperty('--direction', enemy.direction);
+        }
+        
+        // Collision with player (damage)
+        if (!gameState.isAttacking) {
+          const dx = Math.abs(enemy.x - gameState.playerX);
+          const dy = Math.abs(enemy.y - gameState.playerY);
+          if (dx < 40 && dy < 40) {
+            damagePlayer(10);
+          }
+        }
+      });
+    }
+
+    // Update coins
+    function updateCoins() {
+      gameState.coins = gameState.coins.filter(coin => {
+        const dx = Math.abs(coin.x - gameState.playerX);
+        const dy = Math.abs(coin.y - gameState.playerY);
+        if (dx < 30 && dy < 40) {
+          collectCoin(coin);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Collect coin
+    function collectCoin(coin) {
+      const el = document.getElementById('coin-' + coin.id);
+      if (el) {
+        el.remove();
+      }
+      gameState.score += 50;
+      updateScore();
+      createFloatText(coin.x, coin.y, '+50', '#fbbf24');
+      createSparkle(coin.x, coin.y);
+    }
+
+    // Attack
+    function attack() {
+      if (gameState.isAttacking) return;
+      
+      gameState.isAttacking = true;
+      const player = document.getElementById('player');
+      player.className = 'absolute player-attack';
+      
+      // Check for enemy hits
+      gameState.enemies.forEach(enemy => {
+        const dx = enemy.x - gameState.playerX;
+        const dy = Math.abs(enemy.y - gameState.playerY);
+        
+        // Attack range check (direction matters)
+        if (dy < 50 && Math.abs(dx) < 70) {
+          if ((gameState.playerDirection === 1 && dx > -20 && dx < 70) ||
+              (gameState.playerDirection === -1 && dx < 20 && dx > -70)) {
+            hitEnemy(enemy);
+          }
+        }
+      });
+      
+      setTimeout(() => {
+        gameState.isAttacking = false;
+      }, 200);
+    }
+
+    // Hit enemy
+    function hitEnemy(enemy) {
+      enemy.health--;
+      
+      const el = document.getElementById('enemy-' + enemy.id);
+      if (enemy.health <= 0) {
+        // Kill enemy
+        if (el) {
+          el.className = 'absolute entity-death';
+        }
+        gameState.score += 100;
+        updateScore();
+        createFloatText(enemy.x, enemy.y, '+100', '#22c55e');
+        
+        // Chance to spawn coin
+        if (Math.random() > 0.5) {
+          spawnCoin(enemy.x, enemy.y);
+        }
+        
+        setTimeout(() => removeEnemy(enemy), 500);
+      } else {
+        // Hurt animation
+        if (el) {
+          el.style.filter = 'brightness(2)';
+          setTimeout(() => el.style.filter = '', 100);
+        }
+        createFloatText(enemy.x, enemy.y, 'HIT!', '#f97316');
+      }
+    }
+
+    // Remove enemy
+    function removeEnemy(enemy) {
+      const el = document.getElementById('enemy-' + enemy.id);
+      if (el) el.remove();
+      gameState.enemies = gameState.enemies.filter(e => e.id !== enemy.id);
+    }
+
+    // Damage player
+    function damagePlayer(amount) {
+      gameState.playerHealth -= amount;
+      updateHealthBar();
+      
+      const player = document.getElementById('player');
+      player.classList.add('player-hurt');
+      setTimeout(() => player.classList.remove('player-hurt'), 200);
+      
+      if (gameState.playerHealth <= 0) {
+        gameOver();
+      }
+    }
+
+    // Update health bar
+    function updateHealthBar() {
+      const fill = document.getElementById('health-fill');
+      fill.style.width = Math.max(0, gameState.playerHealth) + '%';
+      
+      if (gameState.playerHealth < 30) {
+        fill.className = 'h-full bg-gradient-to-r from-red-700 to-red-500 transition-all duration-200';
+      } else if (gameState.playerHealth < 60) {
+        fill.className = 'h-full bg-gradient-to-r from-yellow-600 to-yellow-400 transition-all duration-200';
+      } else {
+        fill.className = 'h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-200';
+      }
+    }
+
+    // Update score
+    function updateScore() {
+      document.getElementById('score').textContent = gameState.score;
+    }
+
+    // Game over
+    async function gameOver() {
+      gameState.running = false;
+      
+      document.getElementById('final-score').textContent = gameState.score;
+      
+      // Check for high score
+      if (gameState.score > gameState.highScore) {
+        gameState.highScore = gameState.score;
+        document.getElementById('high-score').textContent = gameState.highScore;
+        document.getElementById('new-high-score').classList.remove('hidden');
+        
+        // Save high score
+        if (window.dataSdk) {
+          const result = await window.dataSdk.create({
+            high_score: gameState.score,
+            player_name: config.player_name,
+            date_achieved: new Date().toISOString()
+          });
+          if (!result.isOk) {
+            console.error('Failed to save high score');
+          }
+        }
+      } else {
+        document.getElementById('new-high-score').classList.add('hidden');
+      }
+      
+      document.getElementById('game-over').classList.remove('hidden');
+      document.getElementById('game-over').style.display = 'flex';
+    }
+
+    // Start game
+    function startGame() {
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('game-over').classList.add('hidden');
+      document.getElementById('game-over').style.display = 'none';
+      
+      // Reset state
+      gameState.running = true;
+      gameState.score = 0;
+      gameState.playerHealth = 100;
+      gameState.playerX = 100;
+      gameState.playerY = 0;
+      gameState.playerVelX = 0;
+      gameState.playerVelY = 0;
+      gameState.enemies = [];
+      gameState.coins = [];
+      gameState.lastSpawn = Date.now();
+      
+      // Clear entities
+      document.getElementById('enemies').innerHTML = '';
+      document.getElementById('coins').innerHTML = '';
+      document.getElementById('effects').innerHTML = '';
+      
+      updateScore();
+      updateHealthBar();
+      
+      gameLoop();
+    }
+
+    // Game loop
+    function gameLoop() {
+      if (!gameState.running) return;
+      
+      updatePlayer();
+      updateEnemies();
+      updateCoins();
+      
+      // Spawn enemies
+      if (Date.now() - gameState.lastSpawn > gameState.spawnInterval) {
+        spawnEnemy();
+        gameState.lastSpawn = Date.now();
+        // Gradually increase difficulty
+        gameState.spawnInterval = Math.max(800, gameState.spawnInterval - 50);
+      }
+      
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Input handling
+    document.addEventListener('keydown', (e) => {
+      gameState.keys[e.key] = true;
+      if (e.key === ' ' && gameState.running) {
+        e.preventDefault();
+        attack();
+      }
+    });
+    
+    document.addEventListener('keyup', (e) => {
+      gameState.keys[e.key] = false;
+    });
+
+    // Mobile controls
+    document.getElementById('btn-left').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      gameState.keys['left'] = true;
+    });
+    document.getElementById('btn-left').addEventListener('touchend', () => {
+      gameState.keys['left'] = false;
+    });
+    
+    document.getElementById('btn-right').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      gameState.keys['right'] = true;
+    });
+    document.getElementById('btn-right').addEventListener('touchend', () => {
+      gameState.keys['right'] = false;
+    });
+    
+    document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      gameState.keys['jump'] = true;
+    });
+    document.getElementById('btn-jump').addEventListener('touchend', () => {
+      gameState.keys['jump'] = false;
+    });
+    
+    document.getElementById('btn-attack').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (gameState.running) attack();
+    });
+
+    // Button handlers
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+
+    // Data handler for high scores
+    const dataHandler = {
+      onDataChanged(data) {
+        highScores = data;
+        if (data.length > 0) {
+          const maxScore = Math.max(...data.map(d => d.high_score || 0));
+          gameState.highScore = maxScore;
+          document.getElementById('high-score').textContent = maxScore;
+        }
+      }
+    };
+
+    // Config change handler
+    async function onConfigChange(cfg) {
+      config = { ...defaultConfig, ...cfg };
+      
+      document.getElementById('game-title').textContent = config.game_title || defaultConfig.game_title;
+      document.getElementById('title-display').textContent = config.game_title || defaultConfig.game_title;
+      document.getElementById('player-display').textContent = config.player_name || defaultConfig.player_name;
+      
+      const container = document.getElementById('game-container');
+      container.style.background = `linear-gradient(180deg, ${config.background_color} 0%, #16213e 50%, #0f3460 100%)`;
+    }
+
+    // Initialize SDKs
+    async function init() {
+      createStars();
+      
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange,
+          mapToCapabilities: (cfg) => ({
+            recolorables: [
+              {
+                get: () => cfg.background_color || defaultConfig.background_color,
+                set: (v) => { cfg.background_color = v; window.elementSdk.setConfig({ background_color: v }); }
+              },
+              {
+                get: () => cfg.accent_color || defaultConfig.accent_color,
+                set: (v) => { cfg.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); }
+              },
+              {
+                get: () => cfg.text_color || defaultConfig.text_color,
+                set: (v) => { cfg.text_color = v; window.elementSdk.setConfig({ text_color: v }); }
+              },
+              {
+                get: () => cfg.player_color || defaultConfig.player_color,
+                set: (v) => { cfg.player_color = v; window.elementSdk.setConfig({ player_color: v }); }
+              },
+              {
+                get: () => cfg.enemy_color || defaultConfig.enemy_color,
+                set: (v) => { cfg.enemy_color = v; window.elementSdk.setConfig({ enemy_color: v }); }
+              }
+            ],
+            borderables: [],
+            fontEditable: undefined,
+            fontSizeable: undefined
+          }),
+          mapToEditPanelValues: (cfg) => new Map([
+            ['game_title', cfg.game_title || defaultConfig.game_title],
+            ['player_name', cfg.player_name || defaultConfig.player_name]
+          ])
+        });
+      }
+      
+      if (window.dataSdk) {
+        const result = await window.dataSdk.init(dataHandler);
+        if (!result.isOk) {
+          console.error('Failed to initialize data SDK');
+        }
+      }
+    }
+
+    init();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d6c51b6d6e1d9a6',t:'MTc3MjU3OTQ3NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
