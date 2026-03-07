@@ -21,7 +21,11 @@ body{
         font-family: 'verdana';
      
     }
-
+    .content{
+        max-width: 1100px;
+        margin: auto;
+        padding: 20pxs;
+    }
 
     .school{
         width: 250px;
@@ -44,5 +48,14 @@ body{
         color: #6A89A7;
         font-size: 80px;
         padding: 40px;
+    }
+
+    .about_me{
+        color: #384959;
+        padding: 40px;
+        font: Verdana;
+        font-size: 80px;
+        
+        
     }
 }
