@@ -60,6 +60,15 @@ body{
     }
 
     .web_image{
+        width: 220px;
+        height: 300px;
+        border-style: double;
+        padding: 60px;
+        align: center;
+        
+    }
+
+     .web_image_2{
         width: 550px;
         height: 300px;
         border-style: double;
